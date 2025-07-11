@@ -1,0 +1,53 @@
+name: Build & Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        rust: [stable, beta, nightly]
+        features: [default, serde, base64, simd_backend]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+      exclude:
+        - { rust: stable,   features: simd_backend }
+        - { rust: beta,     features: simd_backend }
+        - { os: windows-latest, features: simd_backend }
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+          override: true
+
+      - name: Install components
+        run: rustup component add clippy rustfmt
+
+      - name: Build
+        run: cargo build --verbose --features "${{ matrix.features }}"
+
+      - name: Test
+        run: cargo test --verbose --features "${{ matrix.features }}"
+
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+      - name: Lint with Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
